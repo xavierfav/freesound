@@ -10,6 +10,9 @@
 {{ block.super }}
 <script type="text/javascript" src="{% google_maps_js %}"></script>
 <script src="{{media_url}}js/markerclustererV3.js" type="text/javascript"></script>
+<script src='https://api.mapbox.com/mapbox-gl-js/v0.44.2/mapbox-gl.js'></script>
+<link href='https://api.mapbox.com/mapbox-gl-js/v0.44.2/mapbox-gl.css' rel='stylesheet' />
+<script src="https://unpkg.com/supercluster@3.0.2/dist/supercluster.min.js"></script>
 
 <script type="text/javascript">
     function toggleShareControls(){

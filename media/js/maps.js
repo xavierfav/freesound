@@ -46,11 +46,17 @@ function make_map(geotags_url, map_element_id, extend_initial_bounds, show_clust
     Google Maps API is only called if 'geotags_url' returns at least one geotag.
     TODO: update docs of this function
      */
+
+    mapboxgl.accessToken = 'pk.eyJ1IjoiZnJlZXNvdW5kIiwiYSI6ImNqZ3NhNjgwcDBjemUzM3AzYjUwa3VkemQifQ.L2aSxyZTbXhUwlE2Uvmr2A';
+
+
+
     getSoundsLocations(geotags_url, function(data){
         var nSounds = data.length;
         if (nSounds > 0) {  // only if the user has sounds, we render a map
 
             // Init map and info window objects
+            /*
             var map = new google.maps.Map(
                 document.getElementById('map_canvas'), {
                 center: new google.maps.LatLng(24, 22),
@@ -59,76 +65,101 @@ function make_map(geotags_url, map_element_id, extend_initial_bounds, show_clust
                 scrollwheel: false,
                 streetViewControl: false
                 });
+                */
             var infowindow = new google.maps.InfoWindow();
             google.maps.event.addListener(infowindow, 'closeclick', function() {
                 stopAll();
             });
 
+
+            var map = new mapboxgl.Map({
+              container: 'map_canvas', // HTML container id
+              style: 'mapbox://styles/mapbox/satellite-v9', // style URL
+              center: [24, 22], // starting position as [lng, lat]
+              zoom: 0
+            });
+
+
+
+
             // Add markers for each sound
-            var bounds = new google.maps.LatLngBounds();
-            var lastPoint;
-            var markers = [];  // only used for clustering
+            //var geojson_coordinates = [];
+            var bounds = new mapboxgl.LngLatBounds();
 
             $.each(data, function(index, item) {
                 var id = item[0];
                 var lat = item[1];
                 var lon = item[2];
 
-                var point = new google.maps.LatLng(lat, lon);
-                lastPoint = point;
-                if (extend_initial_bounds){
-                    bounds.extend(point);
-                }
+                //geojson_coordinates.push([lon, lat]);
 
-                var marker = new google.maps.Marker({'position': point, 'map': map});
-                if (show_clusters) {
-                    markers.push(marker);
-                }
 
-                google.maps.event.addListener(marker, 'click', function()
-                {
+                var marker = new mapboxgl.Marker()
+                .setLngLat([lon, lat])
+                .addTo(map);
+
+                /*
+                marker.addEventListener('click', function(){
                     stopAll();
                     ajaxLoad( '/geotags/infowindow/' + id, function(data, responseCode)
                     {
-                        infowindow.setContent(data.response);
-                        infowindow.open(map, marker);
+                        var popup = new mapboxgl.Popup().setHTML(data.response);
+
+                        marker.setPopup(popup);
+                        marker.openPopup();
+                        //infowindow.open(map, marker);
                         setTimeout(function() {
                             makePlayer('.infowindow_player .player');
                         }, 500);
                     });
-                });
+
+                });*/
+
+                //var point = new google.maps.LatLng(lat, lon);
+                //lastPoint = point;
+                if (extend_initial_bounds){
+                    bounds.extend([lon, lat]);
+                }
+
+                //markers.push(marker);
             });
+
+
 
             // Show map element id (if provided)
             if (map_element_id !== undefined){
                 $(map_element_id).show();
             }
 
+
             // Set map boundaries
             if ((center_lat !== undefined) && (center_lon !== undefined) && (zoom !== undefined)){
                 // If these parameters are specified, do center using them
-                map.setCenter(new google.maps.LatLng(center_lat, center_lon));
-                map.setZoom(zoom);
+                //map.setCenter(new google.maps.LatLng(center_lat, center_lon));
+                //map.setZoom(zoom);
             } else {
-                google.maps.event.trigger(map, 'resize');
-                if (nSounds > 1){
-                    if (!bounds.isEmpty()) map.fitBounds(bounds);
-                } else {
-                    map.setCenter(lastPoint, 4); // Center the map in the geotag
-                }
+                map.fitBounds(bounds);
+                //google.maps.event.trigger(map, 'resize');
+                //if (nSounds > 1){
+                //    if (!bounds.isEmpty()) map.fitBounds(bounds);
+                //} else {
+                //    map.setCenter(lastPoint, 4); // Center the map in the geotag
+                //}
             }
 
+            /*
             // Cluster map points
             if (show_clusters) {
                 var mcOptions = { gridSize: 50, maxZoom: 12, imagePath:'/media/images/js-marker-clusterer/m' };
                 new MarkerClusterer(map, markers, mcOptions);
-            }
+            }*/
 
             // Run callback function (if passed) after map is built
             if (on_built_callback !== undefined){
                 on_built_callback();
             }
 
+            /*
             // Add listener for callback on bounds changed
             if (on_bounds_changed_callback !== undefined){
                 google.maps.event.addListener( map, 'bounds_changed', function() {
@@ -143,7 +174,7 @@ function make_map(geotags_url, map_element_id, extend_initial_bounds, show_clust
                         bounds.getNorthEast().lng()   // Longitude (at top right  of map)
                     )
                 });
-            }
+            }*/
         }
     });
 }
