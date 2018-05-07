@@ -56,34 +56,15 @@ function make_map(geotags_url, map_element_id, extend_initial_bounds, show_clust
         if (nSounds > 0) {  // only if the user has sounds, we render a map
 
             // Init map and info window objects
-            /*
-            var map = new google.maps.Map(
-                document.getElementById('map_canvas'), {
-                center: new google.maps.LatLng(24, 22),
-                zoom: 2,
-                mapTypeId: google.maps.MapTypeId.SATELLITE,
-                scrollwheel: false,
-                streetViewControl: false
-                });
-                */
-            var infowindow = new google.maps.InfoWindow();
-            google.maps.event.addListener(infowindow, 'closeclick', function() {
-                stopAll();
-            });
-
-
             var map = new mapboxgl.Map({
               container: 'map_canvas', // HTML container id
               style: 'mapbox://styles/mapbox/satellite-v9', // style URL
               center: [24, 22], // starting position as [lng, lat]
-              zoom: 0
+              zoom: 1
             });
 
-
-
-
             // Add markers for each sound
-            //var geojson_coordinates = [];
+            var geojson_features = [];
             var bounds = new mapboxgl.LngLatBounds();
 
             $.each(data, function(index, item) {
@@ -91,39 +72,136 @@ function make_map(geotags_url, map_element_id, extend_initial_bounds, show_clust
                 var lat = item[1];
                 var lon = item[2];
 
-                //geojson_coordinates.push([lon, lat]);
-
-
-                var marker = new mapboxgl.Marker()
-                .setLngLat([lon, lat])
-                .addTo(map);
-
-                /*
-                marker.addEventListener('click', function(){
-                    stopAll();
-                    ajaxLoad( '/geotags/infowindow/' + id, function(data, responseCode)
-                    {
-                        var popup = new mapboxgl.Popup().setHTML(data.response);
-
-                        marker.setPopup(popup);
-                        marker.openPopup();
-                        //infowindow.open(map, marker);
-                        setTimeout(function() {
-                            makePlayer('.infowindow_player .player');
-                        }, 500);
-                    });
-
-                });*/
-
-                //var point = new google.maps.LatLng(lat, lon);
-                //lastPoint = point;
-                if (extend_initial_bounds){
-                    bounds.extend([lon, lat]);
-                }
-
-                //markers.push(marker);
+                geojson_features.push({
+                    "type": "Feature",
+                    "properties": {
+                        "id": id,
+                    },
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [ lon, lat ]
+                    }
+                });
+                bounds.extend([lon, lat]);
             });
 
+
+            map.on('load', function() {
+                map.loadImage('/media/images/map_icon.png', function(error, image) {
+                    if (error) throw error;
+                    map.addImage("custom-marker", image);
+
+
+                    // Add a new source from our GeoJSON data and set the
+                    // 'cluster' option to true. GL-JS will add the point_count property to your source data.
+                    map.addSource("sounds", {
+                        type: "geojson",
+                        data: {
+                            "type": "FeatureCollection",
+                            "features": geojson_features
+                        },
+                        cluster: true,
+                        clusterMaxZoom: 10, // Max zoom to cluster points on
+                        clusterRadius: 50 // Radius of each cluster when clustering points (defaults to 50)
+                    });
+
+                    map.addLayer({
+                        id: "sounds-clusters",
+                        type: "circle",
+                        source: "sounds",
+                        filter: ["has", "point_count"],
+                        paint: {
+                            // Use step expressions (https://www.mapbox.com/mapbox-gl-js/style-spec/#expressions-step)
+                            // with three steps to implement three types of circles:
+                            //   * Blue, 20px circles when point count is less than 100
+                            //   * Yellow, 30px circles when point count is between 100 and 750
+                            //   * Pink, 40px circles when point count is greater than or equal to 750
+                            "circle-color": [
+                                "step",
+                                ["get", "point_count"],
+                                "#51bbd6",
+                                100,
+                                "#f1f075",
+                                750,
+                                "#f28cb1"
+                            ],
+                            "circle-radius": [
+                                "step",
+                                ["get", "point_count"],
+                                20,
+                                100,
+                                30,
+                                750,
+                                40
+                            ]
+                        }
+                    });
+
+                    map.addLayer({
+                        id: "sounds-cluster-labels",
+                        type: "symbol",
+                        source: "sounds",
+                        filter: ["has", "point_count"],
+                        layout: {
+                            "text-field": "{point_count_abbreviated}",
+                            "text-font": ["DIN Offc Pro Medium", "Arial Unicode MS Bold"],
+                            "text-size": 12
+                        }
+                    });
+
+                    map.addLayer({
+                        id: "sounds-unclustered",
+                        type: "symbol",
+                        source: "sounds",
+                        filter: ["!has", "point_count"],
+                        layout: {
+                            "icon-image": "custom-marker"
+                        }
+                    });
+
+                    // popups
+                    map.on('click', 'sounds-unclustered', function (e) {
+
+                        stopAll();
+                        var coordinates = e.features[0].geometry.coordinates.slice();
+                        var sound_id = e.features[0].properties.id;
+
+                        ajaxLoad( '/geotags/infowindow/' + sound_id, function(data, responseCode)
+                        {
+
+                            // Ensure that if the map is zoomed out such that multiple
+                            // copies of the feature are visible, the popup appears
+                            // over the copy being pointed to.
+                            while (Math.abs(e.lngLat.lng - coordinates[0]) > 180) {
+                                coordinates[0] += e.lngLat.lng > coordinates[0] ? 360 : -360;
+                            }
+
+                            var popup = new mapboxgl.Popup()
+                                .setLngLat(coordinates)
+                                .setHTML(data.response)
+                                .addTo(map);
+
+                            popup.on('close', function(e) {
+                                stopAll();  // Stop sound on popup close
+                            });
+
+                            makePlayer('.infowindow_player .player');
+
+                        });
+
+                    });
+
+                    // Change the cursor to a pointer when the mouse is over the places layer.
+                    map.on('mouseenter', 'sounds-unclustered', function () {
+                        map.getCanvas().style.cursor = 'pointer';
+                    });
+
+                    // Change it back to a pointer when it leaves.
+                    map.on('mouseleave', 'sounds-unclustered', function () {
+                        map.getCanvas().style.cursor = '';
+                    });
+                });
+            });
 
 
             // Show map element id (if provided)
