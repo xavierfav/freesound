@@ -137,6 +137,12 @@ class TestAPI(TestCase):
         resp = self.client.options("/apiv2/search/text/?query=ambient&filter=tag:(rain%20OR%CAfe)", secure=True, **headers)
         self.assertEqual(resp.status_code, 200)
 
+    def test_app_schemas(self):
+        user, packs, sounds = create_user_and_sounds(num_sounds=5, num_packs=1)
+
+        c = ApiV2Client(user=user, status='OK', redirect_uri="",
+                        url="https://freesound.com", name="test")
+        c.save()
 
 class ApiSearchPaginatorTest(TestCase):
     def test_page(self):

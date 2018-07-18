@@ -26,6 +26,12 @@ from django.urls import reverse
 from django.contrib.sites.models import Site
 
 
+class ExtendedApplication(Application):
+    def get_allowed_schemes(self):
+        schemes = super(ExtendedApplication, self).get_allowed_schemes()
+        return schemes + ['test']
+
+
 class ApiV2Client(models.Model):
 
     STATUS_CHOICES = (('OK',  'Approved'),
@@ -71,6 +77,7 @@ class ApiV2Client(models.Model):
                 redirect_uris=self.redirect_uri,
                 client_type=Application.CLIENT_PUBLIC,
                 authorization_grant_type=Application.GRANT_AUTHORIZATION_CODE,
+
             )
             self.oauth_client = oauth_cient
 
