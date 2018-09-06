@@ -45,7 +45,7 @@ class ApiV2Client(models.Model):
 
     DEFAULT_STATUS = 'OK'
 
-    oauth_client = models.OneToOneField(Application, related_name='apiv2_client', default=None, null=True, blank=True)
+    oauth_client = models.OneToOneField(ExtendedApplication, related_name='apiv2_client', default=None, null=True, blank=True)
     key = models.CharField(max_length=40, blank=True)
     user = models.ForeignKey(User, related_name='apiv2_client')
     status = models.CharField(max_length=3, default=DEFAULT_STATUS, choices=STATUS_CHOICES)
@@ -75,12 +75,12 @@ class ApiV2Client(models.Model):
 
         if not self.oauth_client:
             # Set oauth client (create oauth client object)
-            oauth_client = Application.objects.create(
+            oauth_client = ExtendedApplication.objects.create(
                 user=self.user,
                 name=self.name,
                 redirect_uris=self.redirect_uri,
-                client_type=Application.CLIENT_PUBLIC,
-                authorization_grant_type=Application.GRANT_AUTHORIZATION_CODE,
+                client_type=ExtendedApplication.CLIENT_PUBLIC,
+                authorization_grant_type=ExtendedApplication.GRANT_AUTHORIZATION_CODE,
             )
             self.oauth_client = oauth_client
 
