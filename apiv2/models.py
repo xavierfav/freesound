@@ -20,17 +20,20 @@
 
 from django.db import models
 from django.contrib.auth.models import User
-from oauth2_provider.models import AbstractApplication
+from oauth2_provider.models import AbstractApplication, Application
 from django.conf import settings
 from django.urls import reverse
 from django.contrib.sites.models import Site
 
 
 class ExtendedApplication(AbstractApplication):
+    redirect_uri_scheme = models.CharField(max_length=100, default=None)
+
     def get_allowed_schemes(self):
         schemes = super(ExtendedApplication, self).get_allowed_schemes()
-        return schemes + [u'test']
-    # TODO: implement proper additional schema from URL
+        if self.redirect_uri_scheme is not None:
+            return schemes + [self.redirect_uri_scheme]
+        return schemes
 
 
 class ApiV2Client(models.Model):
@@ -42,7 +45,7 @@ class ApiV2Client(models.Model):
 
     DEFAULT_STATUS = 'OK'
 
-    oauth_client = models.OneToOneField(ExtendedApplication, related_name='apiv2_client', default=None, null=True, blank=True)
+    oauth_client = models.OneToOneField(Application, related_name='apiv2_client', default=None, null=True, blank=True)
     key = models.CharField(max_length=40, blank=True)
     user = models.ForeignKey(User, related_name='apiv2_client')
     status = models.CharField(max_length=3, default=DEFAULT_STATUS, choices=STATUS_CHOICES)
@@ -72,14 +75,14 @@ class ApiV2Client(models.Model):
 
         if not self.oauth_client:
             # Set oauth client (create oauth client object)
-            oauth_cient = ExtendedApplication.objects.create(
+            oauth_client = Application.objects.create(
                 user=self.user,
                 name=self.name,
                 redirect_uris=self.redirect_uri,
-                client_type=ExtendedApplication.CLIENT_PUBLIC,
-                authorization_grant_type=ExtendedApplication.GRANT_AUTHORIZATION_CODE,
+                client_type=Application.CLIENT_PUBLIC,
+                authorization_grant_type=Application.GRANT_AUTHORIZATION_CODE,
             )
-            self.oauth_client = oauth_cient
+            self.oauth_client = oauth_client
 
             # Set key (using same key as in oauth client to simplify work for developers)
             self.key = self.oauth_client.client_secret

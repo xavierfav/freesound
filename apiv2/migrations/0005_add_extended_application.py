@@ -28,7 +28,21 @@ def migrate_data_forward(apps, schema_editor):
 
 def migrate_data_backward(apps, schema_editor):
     extended_application_cls = apps.get_model('apiv2', 'ExtendedApplication')
-    extended_application_cls.objects.all().delete()
+    application_cls = apps.get_model('oauth2_provider', 'Application')
+    original_application_ids = application_cls.objects.all().values_list('id', flat=True)
+    for app in extended_application_cls.objects.all():
+        if app.id not in original_application_ids:
+            application_cls.objects.create(
+                id=app.id,
+                client_id=app.client_id,
+                redirect_uris=app.redirect_uris,
+                client_type=app.client_type,
+                authorization_grant_type=app.authorization_grant_type,
+                client_secret=app.client_secret,
+                name=app.name,
+                skip_authorization=app.skip_authorization,
+                user=app.user
+            )
 
 
 class Migration(migrations.Migration):
@@ -53,15 +67,11 @@ class Migration(migrations.Migration):
                 ('created', models.DateTimeField(auto_now_add=True)),
                 ('updated', models.DateTimeField(auto_now=True)),
                 ('user', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='apiv2_extendedapplication', to=settings.AUTH_USER_MODEL)),
+                ('redirect_uri_scheme', models.CharField(default=None, max_length=100))
             ],
             options={
                 'abstract': False,
             },
         ),
-        migrations.RunPython(migrate_data_forward, migrate_data_backward),
-        migrations.AlterField(
-            model_name='apiv2client',
-            name='oauth_client',
-            field=models.OneToOneField(blank=True, default=None, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='apiv2_client', to='apiv2.ExtendedApplication'),
-        ),
+        migrations.RunPython(migrate_data_forward, migrate_data_backward)
     ]

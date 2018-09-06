@@ -300,7 +300,7 @@ OAUTH2_PROVIDER = {
     'REQUEST_APPROVAL_PROMPT': 'auto',
     'CLIENT_ID_GENERATOR_CLASS': 'apiv2.apiv2_utils.FsClientIdGenerator'
 }
-OAUTH2_PROVIDER_APPLICATION_MODEL = 'apiv2.ExtendedApplication'
+OAUTH2_PROVIDER_APPLICATION_MODEL = 'oauth2_provider.Application'
 
 # Set DATA_URL. You can overwrite this to point to production data ("https://freesound.org/data/") in
 # local settings if needed ;)
