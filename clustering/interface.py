@@ -5,9 +5,13 @@ from django.core.cache import cache
 from utils.encryption import create_hash
 from utils.search.search_general import search_prepare_query, perform_solr_query, \
     search_prepare_parameters
+from celery import chord
+import numpy as np
 
-from tasks import cluster_sounds
-from clustering_settings import MAX_RESULTS_FOR_CLUSTERING, CLUSTERING_CACHE_TIME, DEFAULT_FEATURES
+from tasks import cluster_sounds, nearest_neighbors, aggregate_nearest_neighbors_and_cluster_sounds
+from clustering import number_of_nearest_neighbors
+from clustering_settings import MAX_RESULTS_FOR_CLUSTERING, CLUSTERING_CACHE_TIME, DEFAULT_FEATURES, \
+    CLUSTERING_PENDING_CACHE_TIME, PARALLEL_NEAREST_NEIGHBORS_COMPUTATION, SIZE_CHUNKS_NEAREST_NEIGHBORS_COMPUTATION
 from . import CLUSTERING_RESULT_STATUS_PENDING, CLUSTERING_RESULT_STATUS_FAILED
 
 
@@ -78,12 +82,40 @@ def cluster_sound_results(request, features=DEFAULT_FEATURES):
 
     else:
         # if not in cache, query solr and perform clustering
+
+        # store pending state in cache
+        cache.set(cache_key_hashed, CLUSTERING_RESULT_STATUS_PENDING, CLUSTERING_PENDING_CACHE_TIME)
+    
         sound_ids = get_sound_ids_from_solr_query(query_params)
 
         # launch clustering with celery async task
-        cluster_sounds.delay(cache_key_hashed, sound_ids, features)
+        # There are two ways of performing the clustering:        
+        if PARALLEL_NEAREST_NEIGHBORS_COMPUTATION:
+            # parallelize the nearest neighbor searches in several workers
+            # we compute k (number of nearest neighbors) outside of the tasks
+            k = number_of_nearest_neighbors(sound_ids)
+            chord((nearest_neighbors.s(sound_ids_chunk, k, sound_ids, features) 
+                  for sound_ids_chunk in chunks(sound_ids, SIZE_CHUNKS_NEAREST_NEIGHBORS_COMPUTATION)),
+                  aggregate_nearest_neighbors_and_cluster_sounds.s(cache_key_hashed))()
+        else:
+            # compute clustering without parallelization
+            cluster_sounds.delay(cache_key_hashed, sound_ids, features)
 
         return {'finished': False, 'error': False}
+
+
+def chunks(l, n):
+    """Yield successive n-sized chunks from l.
+    
+    Args:
+        l (list[int]): list of sound ids.
+        n (int): size of the chunks.
+    
+    Yields:
+        List[int]: list of sound ids.
+    """
+    for i in xrange(0, len(l), n):
+        yield l[i:i + n]
 
 
 def hash_cache_key(key):

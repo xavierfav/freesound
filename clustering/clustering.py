@@ -2,6 +2,7 @@ import os, sys
 from time import time
 import logging
 from django.conf import settings
+import numpy as np
 
 import clustering_settings as clust_settings
 
@@ -9,7 +10,6 @@ import clustering_settings as clust_settings
 # We avoid importing them in appservers to avoid having to install unneeded dependencies.
 if settings.IS_CELERY_WORKER:
     from gaia_wrapper import GaiaWrapperClustering
-    import numpy as np
     from sklearn import metrics
     from sklearn.feature_selection import mutual_info_classif
     import json
@@ -235,9 +235,7 @@ class ClusteringEngine():
         # Create k nearest neighbors graph        
         graph = nx.Graph()
         graph.add_nodes_from(sound_ids_list)
-        # we set k to log2(N), where N is the number of elements to cluster. This allows us to reach a sufficient number of 
-        # neighbors for small collections, while limiting it for larger collections, which ensures low-computational complexity.
-        k = int(np.ceil(np.log2(len(sound_ids_list))))
+        k = number_of_nearest_neighbors(sound_ids_list)
 
         for sound_id in sound_ids_list:
             try:
@@ -429,18 +427,100 @@ class ClusteringEngine():
 
         return {'error': False, 'result': communities, 'graph': graph_json}
 
-    def k_nearest_neighbors(self, sound_id, k):
-        """Performs a K-Nearest Neighbors search on the sound given as input.
+    def cluster_points_from_nearest_neighbors(self, nearest_neighbors_dict):
+        """Applies clustering on the sounds with their nearest neighbors already computed.
 
-        This is currently not used, but could be useful for instance for the get similar sounds feature.
+        The code here repeats a bit things from the cluster_points() method.
+        TODO: create an abstraction of this step to use in both methods.
+
+        Args:
+            nearest_neighbors_dict (dict): dict containing the nearest neighbors and their associated distances for 
+                each sound given as input.
+        
+        Returns:
+            Dict: contains the resulting clustering classes and the graph in node-link format suitable for JSON serialization.
+        """
+        # Create graph
+        graph = nx.Graph()
+        graph.add_nodes_from(nearest_neighbors_dict.keys())
+
+        for sound_id, nearest_neighbors in nearest_neighbors_dict.items():
+            if nearest_neighbors:
+                graph.add_edges_from([(sound_id, i[0]) for i in nearest_neighbors if i[1]<clust_settings.MAX_NEIGHBORS_DISTANCE])
+            else:
+                graph.remove_node(sound_id)
+
+        # Remove isolated nodes
+        graph.remove_nodes_from(list(nx.isolates(graph)))
+    
+        if len(graph.nodes) == 0:  # the graph does not contain any node
+            return {'error': False, 'result': None, 'graph': None}
+
+        classes, num_communities, communities, modularity = self.cluster_graph(graph)
+        ratio_intra_community_edges = self._ratio_intra_community_edges(graph, communities)
+        node_community_centralities = self._point_centralities(graph, communities)
+
+        # Add cluster and centralities info to graph
+        nx.set_node_attributes(graph, classes, 'group')
+        nx.set_node_attributes(graph, node_community_centralities, 'group_centrality')
+
+        # Evaluation metrics vs reference features
+        ami, ss, ci = self._evaluation_metrics(classes)
+
+        logger.info('Clustering done! '
+                    'Modularity: {}, '
+                    'Average ratio_intra_community_edges: {}, '
+                    'Average Mutual Information with reference: {}, '
+                    'Silouhette Coefficient with reference: {}, '
+                    'Calinski Index with reference: {}, '
+                    'Davies Index with reference: {}'
+                    .format(modularity, np.mean(ratio_intra_community_edges), ami, ss, ci, None))
+
+        # Export graph as json
+        graph_json = json_graph.node_link_data(graph)
+        
+        return {'error': False, 'result': communities, 'graph': graph_json}
+
+    def k_nearest_neighbors(self, sound_ids, k, in_sound_ids=[], features=clust_settings.DEFAULT_FEATURES):
+        """Performs a K-Nearest Neighbors search on the sounds given as input.
+
+        This method is used when parallelizing the computation of the nearest neighbor searches accross multiple
+        workers
 
         Args: 
-            sound_id (str): Sound id as query.
+            sound_ids (List[str]): List containing sound ids.
             k (str): number of nearest neighbors to get.
+            in_sound_ids (List[str]): subset of sounds to perform the searches on.
+            features (str): name of the features used for clustering the sounds.
 
         Returns:
-            str: string containing the comma-separated ids of the nearest neighbors sounds.
+            Dict: Dict containing the nearest neighbors and their associated distances for each sound given as input.
         """
-        logger.info('Request k nearest neighbors of point {}'.format(sound_id))
-        results = self.gaia.search_nearest_neighbors(sound_id, int(k))
-        return json.dumps(results)
+        sound_ids = [str(s) for s in sound_ids]
+        logger.info('Request k nearest neighbors of {} points: {} ...'
+                .format(len(sound_ids), ', '.join(sound_ids[:20])))
+        nearest_neighbors = {}
+        for sound_id in sound_ids:
+            try:
+                nearest_neighbors[sound_id] = self.gaia.search_nearest_neighbors(sound_id, int(k), in_sound_ids, features)
+            except ValueError:  # node does not exist in Gaia dataset
+                nearest_neighbors[sound_id] = None
+
+        return nearest_neighbors
+
+
+def number_of_nearest_neighbors(sound_ids_list):
+    """Computes K, the number of nearest neighbors we consider for each sound.
+
+    We leave this function outside of the clustering engine method in order to enable its import from
+    outside of the class methods when using parallele computation of nearest neighbors.
+
+    Args:
+        sound_ids_list (list[str]): list of sound ids.
+    
+    Returns:
+        int: number of nearest neighbors.
+    """
+    # we set k to log2(N), where N is the number of elements to cluster. This allows us to reach a sufficient number of 
+    # neighbors for small collections, while limiting it for larger collections, which ensures low-computational complexity.
+    return int(np.ceil(np.log2(len(sound_ids_list))))

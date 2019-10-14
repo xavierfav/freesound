@@ -70,6 +70,9 @@ class GaiaWrapperClustering:
         Returns:
             List[str]: ids of the retrieved sounds.
         """
+        # We add str conversions because Celery serializes arguments and convert them to unicode which Gaia does not support
+        sound_id = str(sound_id)
+        in_sound_ids = [str(s) for s in in_sound_ids]
         if in_sound_ids:
             filter = 'WHERE point.id IN ("' + '", "'.join(in_sound_ids) + '")'
         else:
@@ -103,6 +106,7 @@ class GaiaWrapperClustering:
         Returns:
             List[List[Float]]: list containing the reference features of the requested sounds.
         """
+        sound_ids = [str(s) for s in sound_ids]
         reference_features = []
         gaia_dataset = getattr(self, '{}_dataset'.format(clust_settings.REFERENCE_FEATURES))
         gaia_descriptor_names = clust_settings.AVAILABLE_FEATURES[clust_settings.REFERENCE_FEATURES]['GAIA_DESCRIPTOR_NAMES']

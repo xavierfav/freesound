@@ -43,3 +43,8 @@ SAVE_RESULTS_FOLDER = None
 
 # Limit of distance when creating Nearest Neighbors graph
 MAX_NEIGHBORS_DISTANCE = 20
+
+# Enable parallele computation of nearest neighbors
+PARALLEL_NEAREST_NEIGHBORS_COMPUTATION = True
+# Size of the chunks
+SIZE_CHUNKS_NEAREST_NEIGHBORS_COMPUTATION = 250
