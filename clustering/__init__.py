@@ -15,3 +15,8 @@ CLUSTERING_RESULT_STATUS_FAILED = "failed"
 def init_clustering_engine():
     global engine
     engine = ClusteringEngine()
+
+
+# We use this fucntion to get the clustering engine from a clustering task in tasks.py.
+def get_clustering_engine():
+    return engine

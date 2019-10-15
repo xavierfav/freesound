@@ -4,6 +4,7 @@ import logging
 
 from clustering_settings import CLUSTERING_CACHE_TIME, CLUSTERING_PENDING_CACHE_TIME
 from . import CLUSTERING_RESULT_STATUS_PENDING, CLUSTERING_RESULT_STATUS_FAILED
+from . import get_clustering_engine
 
 logger = logging.getLogger('clustering')
 
@@ -20,10 +21,8 @@ def cluster_sounds(cache_key_hashed, sound_ids, features):
         sound_ids (List[int]): list containing the ids of the sound to cluster.
         features (str): name of the features used for clustering the sounds (defined in the clustering settings file).
     """
-    # This ensures that the engine is imported after it is re-assigned in __init__.py
-    # There should be a better way to do it to avoid multiple imports that can decrease performance
-    from . import engine
-
+    # Get the engine using this function defined in __init__.py where the engine gets initialized once the app is ready.
+    engine = get_clustering_engine()
     try:
         # perform clustering
         result = engine.cluster_points(cache_key_hashed, features, sound_ids)
@@ -54,7 +53,8 @@ def nearest_neighbors(sound_ids, k, in_sound_ids, features):
     Returns:
         dict: Dict containing the nearest neighbors and their associated distances for each sound given as input.
     """
-    from . import engine
+    # Get the engine using this function defined in __init__.py where the engine gets initialized once the app is ready.
+    engine = get_clustering_engine()
     result = engine.k_nearest_neighbors(sound_ids, k, in_sound_ids, features)
     return result
 
@@ -71,7 +71,8 @@ def aggregate_nearest_neighbors_and_cluster_sounds(self, args, cache_key_hashed)
         args (List[Dict]): dict containing nearest neighbors and associated distances for the sounds to cluster.
         cache_key_hashed (str): hashed key for storing/retrieving the results in cache.
     """
-    from . import engine
+    # Get the engine using this function defined in __init__.py where the engine gets initialized once the app is ready.
+    engine = get_clustering_engine()
     d = {}
     for arg in args:
         d.update(arg)
