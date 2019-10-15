@@ -73,9 +73,17 @@ def aggregate_nearest_neighbors_and_cluster_sounds(self, args, cache_key_hashed)
     """
     # Get the engine using this function defined in __init__.py where the engine gets initialized once the app is ready.
     engine = get_clustering_engine()
-    d = {}
-    for arg in args:
-        d.update(arg)
+
+    # When there are not enough retrieved sounds to use more than one task for nearest neighbor searches
+    # (the number of nearest neighbor searches to do in each worker is defined in the clustering settings), 
+    # this task used as a chord callback recieves a dictionary instead of a list of dictionaries. 
+    if isinstance(args, dict):
+        d = args
+    else:
+        d = {}
+        for arg in args:
+            d.update(arg)
+
     result = engine.cluster_points_from_nearest_neighbors(d)
 
     # store result in cache
