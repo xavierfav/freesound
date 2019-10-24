@@ -221,29 +221,23 @@ class ClusteringEngine():
             }
             json.dump(result, open('{}/{}.json'.format(clust_settings.SAVE_RESULTS_FOLDER, query_params[0]), 'w'))
 
-    def create_knn_graph(self, sound_ids_list, features=clust_settings.DEFAULT_FEATURES):
-        """Creates a K-Nearest Neighbors Graph representation of the given sounds.
+    def create_knn_graph(self, nearest_neighbors_dict):
+        """Creates a K-Nearest Neighbors Graph representation of the given sounds given computed nearest_neighbors.
 
         Args:
-            sound_ids_list (List[str]): list of sound ids.
-            features (str): name of the features to be used for nearest neighbors computation. 
-                Available features are listed in the clustering settings file.
+            nearest_neighbors_dict (dict): dict containing the nearest neighbors for each sound given as input.
 
         Returns:
             (nx.Graph): NetworkX graph representation of sounds.
         """
-        # Create k nearest neighbors graph        
+        # Create graph
         graph = nx.Graph()
-        graph.add_nodes_from(sound_ids_list)
-        k = number_of_nearest_neighbors(sound_ids_list)
+        graph.add_nodes_from(nearest_neighbors_dict.keys())
 
-        for sound_id in sound_ids_list:
-            try:
-                nearest_neighbors = self.gaia.search_nearest_neighbors(sound_id, k, sound_ids_list, features=features)
-                # edges += [(sound_id, i[0]) for i in nearest_neighbors if i[1]<clust_settings.MAX_NEIGHBORS_DISTANCE]
-                graph.add_edges_from([(sound_id, i[0]) for i in nearest_neighbors if i[1]<clust_settings.MAX_NEIGHBORS_DISTANCE])
-                # graph.add_weighted_edges_from([(sound_id, i[0], 1/i[1]) for i in nearest_neighbors if i[1]<clust_settings.MAX_NEIGHBORS_DISTANCE])
-            except ValueError:  # node does not exist in Gaia dataset
+        for sound_id, nearest_neighbors in nearest_neighbors_dict.items():
+            if nearest_neighbors:
+                graph.add_edges_from([(sound_id, i) for i in nearest_neighbors])
+            else:
                 graph.remove_node(sound_id)
 
         # Remove isolated nodes
@@ -253,6 +247,8 @@ class ClusteringEngine():
 
     def create_common_nn_graph(self, sound_ids_list, features=clust_settings.DEFAULT_FEATURES):
         """Creates a Common Nearest Neighbors Graph representation of the given sounds.
+
+        TODO: Adapt this function to work with parallelised and non-parallelised clustering (similar to the method above)
 
         Args:
             sound_ids_list (List[str]): list of sound ids.
@@ -386,78 +382,35 @@ class ClusteringEngine():
         logger.info('Request clustering of {} points: {} ... from the query "{}"'
                 .format(len(sound_ids), ', '.join(sound_ids[:20]), json.dumps(query_params)))
 
-        graph = self.create_knn_graph(sound_ids, features=features)
+        k = number_of_nearest_neighbors(sound_ids)
+        nearest_neighbors = self.k_nearest_neighbors(sound_ids, k, in_sound_ids=sound_ids, features=features)
 
-        if len(graph.nodes) == 0:  # the graph does not contain any node
-            return {'error': False, 'result': None, 'graph': None}
-
-        classes, num_communities, communities, modularity = self.cluster_graph(graph)
-
-        ratio_intra_community_edges = self._ratio_intra_community_edges(graph, communities)
-
-        # Here we could add a step for discarding some clusters, for instance by doing:
-        # graph, classes, communities, ratio_intra_community_edges = self.remove_lowest_quality_cluster(
-        #         graph, classes, communities, ratio_intra_community_edges)
-
-        node_community_centralities = self._point_centralities(graph, communities)
-
-        # Add cluster and centralities info to graph
-        nx.set_node_attributes(graph, classes, 'group')
-        nx.set_node_attributes(graph, node_community_centralities, 'group_centrality')
-
-        # Evaluation metrics vs reference features
-        ami, ss, ci = self._evaluation_metrics(classes)
-
-        end_time = time()
-        logger.info('Clustering done! It took {} seconds. '
-                    'Modularity: {}, '
-                    'Average ratio_intra_community_edges: {}, '
-                    'Average Mutual Information with reference: {}, '
-                    'Silouhette Coefficient with reference: {}, '
-                    'Calinski Index with reference: {}, '
-                    'Davies Index with reference: {}'
-                    .format(end_time-start_time, modularity, np.mean(ratio_intra_community_edges), ami, ss, ci, None))
-
-        # Export graph as json
-        graph_json = json_graph.node_link_data(graph)
-
-        # Save results to file if SAVE_RESULTS_FOLDER is configured in clustering settings
-        self._save_results_to_file(query_params, features, graph_json, sound_ids, modularity, 
-                                   num_communities, ratio_intra_community_edges, ami, ss, ci, communities)
-
-        return {'error': False, 'result': communities, 'graph': graph_json}
+        return self.cluster_points_from_nearest_neighbors(nearest_neighbors)
 
     def cluster_points_from_nearest_neighbors(self, nearest_neighbors_dict):
         """Applies clustering on the sounds with their nearest neighbors already computed.
 
-        The code here repeats a bit things from the cluster_points() method.
-        TODO: create an abstraction of this step to use in both methods.
+        This method aims at facilitate the re-use of code for both non-parallelised and parallelised clustering.
 
         Args:
-            nearest_neighbors_dict (dict): dict containing the nearest neighbors and their associated distances for 
-                each sound given as input.
+            nearest_neighbors_dict (dict): dict containing the nearest neighbors for each sound given as input.
         
         Returns:
             Dict: contains the resulting clustering classes and the graph in node-link format suitable for JSON serialization.
         """
         # Create graph
-        graph = nx.Graph()
-        graph.add_nodes_from(nearest_neighbors_dict.keys())
-
-        for sound_id, nearest_neighbors in nearest_neighbors_dict.items():
-            if nearest_neighbors:
-                graph.add_edges_from([(sound_id, i[0]) for i in nearest_neighbors if i[1]<clust_settings.MAX_NEIGHBORS_DISTANCE])
-            else:
-                graph.remove_node(sound_id)
-
-        # Remove isolated nodes
-        graph.remove_nodes_from(list(nx.isolates(graph)))
+        graph = self.create_knn_graph(nearest_neighbors_dict)
     
         if len(graph.nodes) == 0:  # the graph does not contain any node
             return {'error': False, 'result': None, 'graph': None}
 
         classes, num_communities, communities, modularity = self.cluster_graph(graph)
         ratio_intra_community_edges = self._ratio_intra_community_edges(graph, communities)
+
+        # Here we could add a step for discarding some clusters, for instance by doing:
+        # graph, classes, communities, ratio_intra_community_edges = self.remove_lowest_quality_cluster(
+        #         graph, classes, communities, ratio_intra_community_edges)
+
         node_community_centralities = self._point_centralities(graph, communities)
 
         # Add cluster and centralities info to graph
@@ -478,6 +431,11 @@ class ClusteringEngine():
 
         # Export graph as json
         graph_json = json_graph.node_link_data(graph)
+
+        # TODO: fix the following by adding arguments to this method. Pass them to the celery chord callback
+        # Save results to file if SAVE_RESULTS_FOLDER is configured in clustering settings
+        # self._save_results_to_file(query_params, features, graph_json, sound_ids, modularity, 
+        #                            num_communities, ratio_intra_community_edges, ami, ss, ci, communities)
         
         return {'error': False, 'result': communities, 'graph': graph_json}
 
@@ -494,7 +452,7 @@ class ClusteringEngine():
             features (str): name of the features used for clustering the sounds.
 
         Returns:
-            Dict: Dict containing the nearest neighbors and their associated distances for each sound given as input.
+            Dict: Dict containing the nearest neighbors for each sound given as input.
         """
         sound_ids = [str(s) for s in sound_ids]
         logger.info('Request k nearest neighbors of {} points: {} ...'
@@ -502,7 +460,16 @@ class ClusteringEngine():
         nearest_neighbors = {}
         for sound_id in sound_ids:
             try:
-                nearest_neighbors[sound_id] = self.gaia.search_nearest_neighbors(sound_id, int(k), in_sound_ids, features)
+                # sound_nearest_neighbors = self.gaia.search_nearest_neighbors(sound_id, int(k), in_sound_ids, features)
+                # nearest_neighbors[sound_id] = [s_id for s_id, distance in sound_nearest_neighbors if distance<clust_settings.MAX_NEIGHBORS_DISTANCE]            
+
+                nearest_neighbors_tags = self.gaia.search_nearest_neighbors(sound_id, 10*k, in_sound_ids, features=features)
+                nearest_neighbors_tags = [i[0] for i in nearest_neighbors_tags]
+                nearest_neighbors_audio = self.gaia.search_nearest_neighbors(sound_id, k, in_sound_ids, features='AUDIOSET_FEATURES')
+                nearest_neighbors_audio = [i[0] for i in nearest_neighbors_audio]
+
+                nearest_neighbors[sound_id] = [s_id for idx, s_id in enumerate(nearest_neighbors_audio) if i in nearest_neighbors_tags or idx<3]
+
             except ValueError:  # node does not exist in Gaia dataset
                 nearest_neighbors[sound_id] = None
 
