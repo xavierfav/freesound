@@ -219,7 +219,7 @@ class ClusteringEngine():
                 'calinski_harabaz_score': ci,
                 'communities': communities
             }
-            json.dump(result, open('{}/{}.json'.format(clust_settings.SAVE_RESULTS_FOLDER, query_params[0]), 'w'))
+            json.dump(result, open('{}/{}.json'.format(clust_settings.SAVE_RESULTS_FOLDER, query_params), 'w'))
 
     def create_knn_graph(self, nearest_neighbors_dict):
         """Creates a K-Nearest Neighbors Graph representation of the given sounds given computed nearest_neighbors.
@@ -385,9 +385,9 @@ class ClusteringEngine():
         k = number_of_nearest_neighbors(sound_ids)
         nearest_neighbors = self.k_nearest_neighbors(sound_ids, k, in_sound_ids=sound_ids, features=features)
 
-        return self.cluster_points_from_nearest_neighbors(nearest_neighbors)
+        return self.cluster_points_from_nearest_neighbors(nearest_neighbors, query_params, features, sound_ids)
 
-    def cluster_points_from_nearest_neighbors(self, nearest_neighbors_dict):
+    def cluster_points_from_nearest_neighbors(self, nearest_neighbors_dict, query_params, features, sound_ids):
         """Applies clustering on the sounds with their nearest neighbors already computed.
 
         This method aims at facilitate the re-use of code for both non-parallelised and parallelised clustering.
@@ -434,8 +434,8 @@ class ClusteringEngine():
 
         # TODO: fix the following by adding arguments to this method. Pass them to the celery chord callback
         # Save results to file if SAVE_RESULTS_FOLDER is configured in clustering settings
-        # self._save_results_to_file(query_params, features, graph_json, sound_ids, modularity, 
-        #                            num_communities, ratio_intra_community_edges, ami, ss, ci, communities)
+        self._save_results_to_file(query_params, features, graph_json, sound_ids, modularity, 
+                                   num_communities, ratio_intra_community_edges, ami, ss, ci, communities)
         
         return {'error': False, 'result': communities, 'graph': graph_json}
 
@@ -460,15 +460,8 @@ class ClusteringEngine():
         nearest_neighbors = {}
         for sound_id in sound_ids:
             try:
-                # sound_nearest_neighbors = self.gaia.search_nearest_neighbors(sound_id, int(k), in_sound_ids, features)
-                # nearest_neighbors[sound_id] = [s_id for s_id, distance in sound_nearest_neighbors if distance<clust_settings.MAX_NEIGHBORS_DISTANCE]            
-
-                nearest_neighbors_tags = self.gaia.search_nearest_neighbors(sound_id, 10*k, in_sound_ids, features=features)
-                nearest_neighbors_tags = [i[0] for i in nearest_neighbors_tags]
-                nearest_neighbors_audio = self.gaia.search_nearest_neighbors(sound_id, k, in_sound_ids, features='AUDIOSET_FEATURES')
-                nearest_neighbors_audio = [i[0] for i in nearest_neighbors_audio]
-
-                nearest_neighbors[sound_id] = [s_id for idx, s_id in enumerate(nearest_neighbors_audio) if i in nearest_neighbors_tags or idx<3]
+                sound_nearest_neighbors = self.gaia.search_nearest_neighbors(sound_id, int(k), in_sound_ids, features)
+                nearest_neighbors[sound_id] = [s_id for s_id, distance in sound_nearest_neighbors if distance<clust_settings.MAX_NEIGHBORS_DISTANCE]            
 
             except ValueError:  # node does not exist in Gaia dataset
                 nearest_neighbors[sound_id] = None

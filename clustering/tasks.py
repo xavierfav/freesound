@@ -10,7 +10,7 @@ logger = logging.getLogger('clustering')
 
 
 @task(name="cluster_sounds")
-def cluster_sounds(cache_key_hashed, sound_ids, features):
+def cluster_sounds(cache_key_hashed, cache_key, sound_ids, features):
     """ Triggers the clustering of the sounds given as argument with the specified features.
 
     This is the task that is used for clustering the sounds of a search result asynchronously with Celery.
@@ -25,7 +25,7 @@ def cluster_sounds(cache_key_hashed, sound_ids, features):
     engine = get_clustering_engine()
     try:
         # perform clustering
-        result = engine.cluster_points(cache_key_hashed, features, sound_ids)
+        result = engine.cluster_points(cache_key, features, sound_ids)
 
         # store result in cache
         cache.set(cache_key_hashed, result, CLUSTERING_CACHE_TIME)
@@ -60,7 +60,7 @@ def nearest_neighbors(sound_ids, k, in_sound_ids, features):
 
 
 @task(bind=True, name='aggregate_nearest_neighbors_and_cluster_sounds')
-def aggregate_nearest_neighbors_and_cluster_sounds(self, args, cache_key_hashed):
+def aggregate_nearest_neighbors_and_cluster_sounds(self, args, cache_key_hashed, cache_key, features, sound_ids):
     """Aggregates nearest neighbors and triggers the clustering of the sounds.
     
     This task is performed as a callback of the Celery chord task computed in parallele when enabling 
@@ -84,7 +84,7 @@ def aggregate_nearest_neighbors_and_cluster_sounds(self, args, cache_key_hashed)
         for arg in args:
             d.update(arg)
 
-    result = engine.cluster_points_from_nearest_neighbors(d)
+    result = engine.cluster_points_from_nearest_neighbors(d, cache_key, features, sound_ids)
 
     # store result in cache
     cache.set(cache_key_hashed, result, CLUSTERING_CACHE_TIME)

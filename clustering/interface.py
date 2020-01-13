@@ -96,10 +96,10 @@ def cluster_sound_results(request, features=DEFAULT_FEATURES):
             k = number_of_nearest_neighbors(sound_ids)
             chord((nearest_neighbors.s(sound_ids_chunk, k, sound_ids, features) 
                   for sound_ids_chunk in chunks(sound_ids, SIZE_CHUNKS_NEAREST_NEIGHBORS_COMPUTATION)),
-                  aggregate_nearest_neighbors_and_cluster_sounds.s(cache_key_hashed))()
+                  aggregate_nearest_neighbors_and_cluster_sounds.s(cache_key_hashed, cache_key, features, sound_ids))()
         else:
             # compute clustering without parallelization
-            cluster_sounds.delay(cache_key_hashed, sound_ids, features)
+            cluster_sounds.delay(cache_key_hashed, cache_key, sound_ids, features)
 
         return {'finished': False, 'error': False}
 
