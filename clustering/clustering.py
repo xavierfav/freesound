@@ -420,6 +420,11 @@ class ClusteringEngine():
         # Evaluation metrics vs reference features
         ami, ss, ci = self._evaluation_metrics(classes)
 
+        # Compute graph layout for 2D-visualisation
+        # probably the scale should be done on the client browser for adapting it to the screen size
+        pos = nx.drawing.layout.spring_layout(graph, iterations=10, scale=1000, center=[500, 500], dim=2)
+        nx.set_node_attributes(graph, {k: v.tolist() for k, v in pos.items()}, 'position')
+
         logger.info('Clustering done! '
                     'Modularity: {}, '
                     'Average ratio_intra_community_edges: {}, '

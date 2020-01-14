@@ -78,22 +78,6 @@
             });
         };
 
-        var force = d3.layout.force()
-            .charge(FORCE_CHARGE)
-            .linkDistance(FORCE_LINK_DISTANCE)
-            .linkStrength(function (d) {
-                if (d.weight) {
-                    return 3 * d.weight;
-                } else {
-                    return 1;
-                }
-            })
-            .size([width, height])
-            .gravity(0.4)
-            .alpha(0.8)
-            .theta(0.8)
-            .friction(0.9);
-
         var zoom = d3.behavior.zoom()
             .scaleExtent([0.3, 2])
             .on("zoom", zoomed);
@@ -130,6 +114,8 @@
 
             graph.nodes.forEach(function (node) {
                 nodeById.set(node.id, node);
+                node.x = node.position[0];
+                node.y = node.position[1];
             });
 
             graph.links.forEach(function (link) {
@@ -138,7 +124,21 @@
             });
 
             // Force layout
-            force
+            var force = d3.layout.force()
+                .charge(FORCE_CHARGE)
+                .linkDistance(FORCE_LINK_DISTANCE)
+                .linkStrength(function (d) {
+                    if (d.weight) {
+                        return 3 * d.weight;
+                    } else {
+                        return 1;
+                    }
+                })
+                .size([width, height])
+                .gravity(0.4)
+                .alpha(0.8)
+                .theta(0.8)
+                .friction(0.9)
                 .nodes(graph.nodes)
                 .links(graph.links)
                 .start();
@@ -193,7 +193,19 @@
                         })
                 });
 
+            var loading = svg.append("text")
+                .attr("dx", width/2-40)
+                .attr("dy", height/2)
+                .attr("text-anchor", "middle")
+                .attr("font-family", "sans-serif")
+                .attr("font-size", 15)
+                .text("Computing layout. One moment please…");
+
             force.on("tick", function () {
+                    node.each(collide(0.3));
+                })
+                .on('end', function () {
+                    loading.remove();
                     link.attr("x1", function (d) {
                             return d.source.x;
                         })
@@ -213,8 +225,7 @@
                         .attr("cy", function (d) {
                             return d.y;
                         });
-                    node.each(collide(0.3));
-                })
+                });
                 // .on('end', function () {
                 //     (function (console) {
                 //         console.save = function (data, filename) {
