@@ -6,7 +6,8 @@
     <title>Force-Directed Layout</title>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
     <script src="//d3js.org/d3.v3.min.js"></script>
-    <script type="text/javascript" src="{{media_url}}js/webAudioApiForDesigners.js"></script>
+    <script src="https://unpkg.com/wavesurfer.js"></script>
+    {% comment %} <script type="text/javascript" src="{{media_url}}js/webAudioApiForDesigners.js"></script> {% endcomment %}
     <style type="text/css">
         .node {
             stroke: rgb(255, 255, 255);
@@ -48,6 +49,15 @@
         body {
             background-color: rgba(128, 128, 128, 0.1);
         }
+
+        #player-container {
+            background-color: rgba(128, 128, 128, 0.2);
+            width: 300px;
+            height: 130px;
+            position: fixed;
+            top: 150px;
+            left: 20px;
+        }
     </style>
 </head>
 
@@ -57,8 +67,19 @@
         <h2>Click on a node to display info</h2>
         <h3></h3>
     </header>
+
     <div id="chart"></div>
+    <div id="player-container">
+        <div id="waveform"></div>
+    </div>
+
     <script type="text/javascript">
+
+        var wavesurfer = WaveSurfer.create({
+            container: '#waveform',
+            backend: 'MediaElement'
+        });
+
         var BASE_NODE_SIZE = 5,
             BASE_NODE_SIZE_ONHOVER = 8,
             RATIO_NODE_SIZE_CENTRALITY = 5,
@@ -167,8 +188,11 @@
             svg.selectAll(".node")
                 .on("mouseenter", function (d) {
                     // load and play sound
-                    context.loadSound(d.url, '0');
-                    playingSound = context.playSound('0');
+                    wavesurfer.load(d.url)
+                    wavesurfer.play();
+                    //context.loadSound(d.url, '0');
+                    //console.log(wavesurfer)
+                    //playingSound = context.playSound('0');
 
                     // make node bigger
                     d3.select(this)
@@ -181,9 +205,10 @@
                 })
                 .on("mouseleave", function () {
                     // stop playing sound
-                    if (playingSound) {
-                        playingSound.pause();
-                    }
+                    wavesurfer.stop()
+                    //if (playingSound) {
+                    //    playingSound.pause();
+                    //}
 
                     // make node smaller
                     d3.select(this)
@@ -350,8 +375,8 @@
         }
 
         // Web Audio API
-        var context = initializeNewWebAudioContext();
-        var playingSound; // keep track of playing sound to stop it
+        //var context = initializeNewWebAudioContext();
+        //var playingSound; // keep track of playing sound to stop it
     </script>
 </body>
 
