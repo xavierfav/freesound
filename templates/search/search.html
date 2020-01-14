@@ -206,6 +206,37 @@
         $("#filter_query").val(cleaned);
     }
 
+    // Play cluster examples on mouseover & click
+    function enableAudioClusterExamples() {
+        function playAudio(el, index) {
+            var audioPlayers = el.children('audio');
+            var index = (typeof index == 'number') ? index: parseInt(Math.random()*audioPlayers.length);
+            var audio = audioPlayers[index];
+            audio.onended = function() {
+                index = (index + 1) % audioPlayers.length;
+                playAudio(el, index)
+            }
+            audio.play();
+        };
+
+        function stopAllAudio() {
+            $('audio').each(function (i, el) {el.pause();});
+        };
+        
+        $(".clustering-facet").children('img')
+            .mouseenter(function() {
+                stopAllAudio();
+                playAudio($(this).parent(), false);
+            })
+            .mouseleave(function() {
+                stopAllAudio();
+            })
+            .click(function() {
+                stopAllAudio();
+                playAudio($(this).parent(), false);
+            });
+    }
+    
     // function for requesting clustering
     function request_clustering()
     {
@@ -221,6 +252,7 @@
                         $('#clusters-div').replaceWith(""); // TODO: remove clusters facet container
                     } else {
                         $('#clusters-div').replaceWith(data);
+                        enableAudioClusterExamples();
                     }
         });
     }
