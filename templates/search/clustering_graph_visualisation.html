@@ -204,18 +204,18 @@
                     d3.select(this).moveToFront();
                 })
                 .on("mouseleave", function () {
-                    // stop playing sound
-                    wavesurfer.stop()
-                    //if (playingSound) {
-                    //    playingSound.pause();
-                    //}
-
                     // make node smaller
                     d3.select(this)
                         .transition()
                         .attr("r", function (d) {
                             return size_node(d.group_centrality);
                         })
+                        
+                    // stop playing sound
+                    wavesurfer.stop()
+                    //if (playingSound) {
+                    //    playingSound.pause();
+                    //}
                 });
 
             var loading = svg.append("text")
